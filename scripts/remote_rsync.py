@@ -3,6 +3,10 @@
 
 Default is a dry-run of `rsync -a` without --delete. Conflict policy is an
 open question on okf-plugin#74 and is not silently answered.
+
+S3 is a consumer-side daemon pulling objects to local disk (docs/S3.md), then
+this helper (or the daemon's own copy) lands them at $OKF_REPLICA_ROOT. Direct
+bucket walking is not the documented path.
 """
 from __future__ import annotations
 

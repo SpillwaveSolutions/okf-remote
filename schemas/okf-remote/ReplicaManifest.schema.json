@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ReplicaManifest.schema.json",
+  "title": "okf.replica.manifest/v0",
+  "type": "object",
+  "required": [
+    "schema",
+    "replica_id",
+    "synced_at",
+    "root"
+  ],
+  "properties": {
+    "schema": {
+      "const": "okf.replica.manifest/v0"
+    },
+    "replica_id": {
+      "type": "string"
+    },
+    "source_fingerprint": {
+      "type": "string"
+    },
+    "synced_at": {
+      "type": "string"
+    },
+    "root": {
+      "type": "string"
+    },
+    "includes_telemetry": {
+      "type": "boolean"
+    }
+  }
+}

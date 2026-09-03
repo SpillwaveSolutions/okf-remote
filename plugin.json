@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "okf-remote",
+  "version": "0.1.0",
+  "description": "Replication of an OKF bundle across machines, plus read-only MCP access. No write verbs.",
+  "author": {
+    "name": "Rick Hightower",
+    "url": "https://github.com/RichardHightower"
+  },
+  "homepage": "https://github.com/SpillwaveSolutions/okf-remote",
+  "repository": "https://github.com/SpillwaveSolutions/okf-remote",
+  "license": "MIT",
+  "keywords": [
+    "okf",
+    "second-brain",
+    "agent-plugins",
+    "claude-code",
+    "grok-build",
+    "codex",
+    "deep-agents",
+    "cursor",
+    "wiki-ticket-sdd"
+  ]
+}

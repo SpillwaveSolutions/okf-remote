@@ -1,0 +1,8 @@
+{
+  "schema": "okf.replica.manifest/v0",
+  "replica_id": "northstar-dev-01",
+  "source_fingerprint": "git:fiction",
+  "synced_at": "2026-08-21T16:02:00Z",
+  "root": "$OKF_REPLICA_ROOT",
+  "includes_telemetry": true
+}

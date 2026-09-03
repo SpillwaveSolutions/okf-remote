@@ -10,4 +10,4 @@ knowledge/.index/
 .brain-sessions/
 .brain-worktrees/
 .brain-session.json
-replica.manifest.json
+/replica.manifest.json

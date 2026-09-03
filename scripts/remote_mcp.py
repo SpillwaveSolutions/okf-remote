@@ -21,6 +21,7 @@ ALLOWED = {
     "replica_status",
 }
 FORBIDDEN_EXACT = {"summarize", "compact", "saliency_detect", "agentic_search"}
+ARTIFACT = (".telemetry.md", ".summary.md", ".saliency.md")
 
 
 def now() -> str:
@@ -44,6 +45,46 @@ def refuse(verb: str) -> int:
         )
     )
     return 1
+
+
+def _frontmatter_type_title(text: str) -> tuple[str, str, str]:
+    typ, title, period = "", "", ""
+    if not text.startswith("---"):
+        return typ, title, period
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return typ, title, period
+    for line in parts[1].splitlines():
+        if line.startswith("type:"):
+            typ = line.split(":", 1)[1].strip().strip("'\"")
+        elif line.startswith("title:"):
+            title = line.split(":", 1)[1].strip().strip("'\"")
+        elif line.startswith("period:"):
+            period = line.split(":", 1)[1].strip().strip("'\"")
+    return typ, title, period
+
+
+def walk_chronological(root: Path) -> list[dict]:
+    """Filesystem walk. No BM25, no vectors, no graph index."""
+    temporal = root / "okf" / "temporal"
+    nodes: list[dict] = []
+    if not temporal.exists():
+        return nodes
+    for p in sorted(temporal.rglob("*.md")):
+        if p.name == "index.md" or p.name.endswith(ARTIFACT):
+            continue
+        text = p.read_text(encoding="utf-8")
+        typ, title, period = _frontmatter_type_title(text)
+        rel = str(p.relative_to(root)).replace("\\", "/")
+        nodes.append(
+            {
+                "path": "/" + rel,
+                "type": typ,
+                "title": title or p.stem,
+                "period": period,
+            }
+        )
+    return nodes
 
 
 def cmd_invoke(args) -> int:
@@ -77,16 +118,24 @@ def cmd_invoke(args) -> int:
         print(json.dumps({"ok": True, "path": str(base), "entries": entries}))
         return 0
     if verb == "get_node":
-        target = root / args.path
+        if not args.path:
+            print(json.dumps({"ok": False, "error": "path required"}))
+            return 1
+        rel = args.path.lstrip("/")
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root.resolve())
+        except ValueError:
+            print(json.dumps({"ok": False, "error": "path escapes replica"}))
+            return 1
         if not target.exists() or not target.is_file():
             print(json.dumps({"ok": False, "error": "not found", "path": args.path}))
             return 1
         print(json.dumps({"ok": True, "path": args.path, "text": target.read_text(encoding="utf-8")}))
         return 0
     if verb == "walk_chronological":
-        year = root / "okf" / "temporal"
-        years = sorted(p.name for p in year.glob("*") if p.is_dir()) if year.exists() else []
-        print(json.dumps({"ok": True, "years": years, "note": "summaries only; open a year file with get_node"}))
+        nodes = walk_chronological(root)
+        print(json.dumps({"ok": True, "engine": "filesystem", "nodes": nodes, "note": "metadata only; open a file with get_node"}))
         return 0
     if verb == "reverse_pointers":
         ptr = root / "okf" / "pointers"
@@ -96,7 +145,7 @@ def cmd_invoke(args) -> int:
             for p in ptr.glob("*.md"):
                 if q in p.name:
                     hits.append(p.name)
-        print(json.dumps({"ok": True, "query": q, "hits": hits, "engine": "scan"}))
+        print(json.dumps({"ok": True, "query": q, "hits": hits, "engine": "scan", "schema": "blocked on okf-plugin#73"}))
         return 0
     return refuse(verb)
 

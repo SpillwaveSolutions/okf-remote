@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MCP = ROOT / "scripts" / "remote_mcp.py"
 RSYNC = ROOT / "scripts" / "remote_rsync.py"
+TS_SAMPLE = ROOT.parent / "okf-time-series" / "sample-knowledge"
 
 
 def mcp(*args):
@@ -47,6 +48,26 @@ class TestRemote(unittest.TestCase):
             self.assertEqual(st.returncode, 0)
             man = json.loads(st.stdout)
             self.assertEqual(man["replica_id"], "northstar-dev-01")
+
+    def test_walk_chronological_on_time_series_sample(self):
+        if not TS_SAMPLE.exists():
+            self.skipTest("okf-time-series sample not next door")
+        r = mcp("walk_chronological", "--root", str(TS_SAMPLE))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        data = json.loads(r.stdout)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["engine"], "filesystem")
+        types = {n["type"] for n in data["nodes"]}
+        self.assertIn("temporal.session", types)
+        self.assertIn("temporal.year", types)
+        paths = [n["path"] for n in data["nodes"]]
+        self.assertTrue(any("software_engineer__atlas__001.md" in p for p in paths))
+        self.assertFalse(any(".telemetry.md" in p for p in paths))
+
+    def test_get_node_refuses_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = mcp("get_node", "--root", tmp, "--path", "../etc/passwd")
+            self.assertNotEqual(r.returncode, 0)
 
 
 if __name__ == "__main__":

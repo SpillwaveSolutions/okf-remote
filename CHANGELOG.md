@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-09-04
+
+- Non-loopback `--bind` requires TLS (`OKF_MCP_TLS_CERT` + `OKF_MCP_TLS_KEY`) or it is a startup error. Loopback may bind bare.
+- Low-latency NFR is scoped to the rsync push path. S3 end-to-end stays bounded by the consumer daemon's pull (`docs/S3.md`).
+
 ## 0.3.0 — 2026-09-03
 
 - Replication is **push**, triggered by a directory watcher (`scripts/remote_watch.py`). Debounce default 2s plus batching.

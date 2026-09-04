@@ -6,6 +6,15 @@ When a bind address is configured the server is an **OAuth 2.1 / OIDC resource s
 
 **Binding without a configured issuer is a startup error, not a warning.** There is no anonymous mode on a network interface. Auth gates access; it does not add verbs. The read-only allow-list is unchanged: `list_nodes`, `get_node`, `walk_chronological`, `query`, `reverse_pointers`, `replica_status`. Every `write_*`, `summarize`, `compact`, and `saliency_detect` remains a validation failure, even with a perfectly valid token.
 
+## TLS
+
+Loopback (`127.0.0.1`, `::1`, `localhost`) may bind bare. Any other bind requires TLS or it is a startup error — same shape as the issuer check. `0.0.0.0:8080` without certs will not start.
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `OKF_MCP_TLS_CERT` | non-loopback | PEM certificate path |
+| `OKF_MCP_TLS_KEY` | non-loopback | PEM private key path |
+
 ## Environment
 
 | Variable | Required on bind | Meaning |

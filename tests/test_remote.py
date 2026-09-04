@@ -251,6 +251,29 @@ class TestRev3PushAndAuth(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("issuer", r.stdout)
 
+    def test_non_loopback_bind_requires_tls(self):
+        secret = b"northstar-test-secret"
+        with tempfile.TemporaryDirectory() as tmp:
+            jwks_path = Path(tmp) / "jwks.json"
+            jwks_path.write_text(
+                json.dumps({"keys": [{"kty": "oct", "kid": "n1", "alg": "HS256", "k": _b64url(secret)}]}),
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["OKF_MCP_ISSUER"] = "https://auth.northstar.example"
+            env["OKF_MCP_AUDIENCE"] = "okf-remote"
+            env["OKF_MCP_JWKS"] = str(jwks_path)
+            env.pop("OKF_MCP_TLS_CERT", None)
+            env.pop("OKF_MCP_TLS_KEY", None)
+            r = subprocess.run(
+                [sys.executable, str(MCP), "serve", "--bind", "0.0.0.0:18766"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("TLS", r.stdout)
+
     def test_token_validation_cases(self):
         secret = b"northstar-test-secret"
         with tempfile.TemporaryDirectory() as tmp:

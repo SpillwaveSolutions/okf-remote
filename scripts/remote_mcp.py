@@ -55,6 +55,7 @@ INVERSES = {
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
+LOOPBACK = {"127.0.0.1", "::1", "localhost", "0:0:0:0:0:0:0:1"}
 
 
 def now() -> str:
@@ -320,6 +321,20 @@ def cmd_serve(argv: list[str]) -> int:
         print(json.dumps({"ok": False, "error": "bind must be host:port"}))
         return 1
     port = int(port_s)
+    loopback = host.strip().lower().strip("[]") in LOOPBACK
+    cert = (os.environ.get("OKF_MCP_TLS_CERT") or "").strip()
+    key = (os.environ.get("OKF_MCP_TLS_KEY") or "").strip()
+    if not loopback and (not cert or not key):
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "non-loopback bind requires TLS",
+                    "hint": "OKF_MCP_TLS_CERT and OKF_MCP_TLS_KEY — loopback may bind bare",
+                }
+            )
+        )
+        return 1
     root = args.root
 
     class Handler(BaseHTTPRequestHandler):
@@ -377,7 +392,24 @@ def cmd_serve(argv: list[str]) -> int:
             self._send(200 if rc == 0 else 403, payload)
 
     httpd = ThreadingHTTPServer((host, port), Handler)
-    print(json.dumps({"ok": True, "bind": args.bind, "issuer": cfg["issuer"], "transport": "network"}))
+    if cert and key:
+        import ssl
+
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(cert, key)
+        httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "bind": args.bind,
+                "issuer": cfg["issuer"],
+                "transport": "network",
+                "tls": bool(cert and key),
+                "loopback": loopback,
+            }
+        )
+    )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

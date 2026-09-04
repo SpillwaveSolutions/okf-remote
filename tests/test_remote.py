@@ -286,13 +286,27 @@ class TestRev3PushAndAuth(unittest.TestCase):
             proc = subprocess.Popen(
                 [sys.executable, str(MCP), "serve", "--bind", "127.0.0.1:18765", "--root", tmp],
                 env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
-            self.addCleanup(proc.kill)
-            self.addCleanup(proc.wait)
-            time.sleep(0.4)
+
+            def _stop():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2)
+
+            self.addCleanup(_stop)
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                try:
+                    urllib.request.urlopen("http://127.0.0.1:18765/", timeout=0.2)
+                except urllib.error.HTTPError:
+                    break
+                except OSError:
+                    time.sleep(0.05)
             url = "http://127.0.0.1:18765/"
 
             def post(token, payload):

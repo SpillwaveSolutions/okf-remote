@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Read-only verb table for okf-remote.
 
-stdio-only. No bind address. No write or processing verbs.
+stdio is the default transport and is unauthenticated. When a bind address is
+configured the server is an OAuth 2.1 / OIDC resource server: it validates
+incoming tokens and nothing more. Token issuance belongs to a separate
+authorization server. Binding without OKF_MCP_ISSUER is a startup error.
+
 agentic_search is a skill (AGER), not a verb. Its model is configured per
 deployment via OKF_AGENTIC_SEARCH_MODEL — never pinned in this plugin.
 
@@ -17,6 +21,9 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from remote_watch import read_heartbeat  # noqa: E402
 
 ALLOWED = {
     "list_nodes",
@@ -219,8 +226,11 @@ def cmd_invoke(args) -> int:
     root = replica_root(args.root)
     if verb == "replica_status":
         manifest = root / "replica.manifest.json"
+        watcher = read_heartbeat(root)
         if manifest.exists():
-            print(manifest.read_text(encoding="utf-8"))
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["watcher"] = watcher
+            print(json.dumps(data))
             return 0
         print(
             json.dumps(
@@ -230,6 +240,7 @@ def cmd_invoke(args) -> int:
                     "replica_id": "uninitialized",
                     "synced_at": None,
                     "root": str(root),
+                    "watcher": watcher,
                 }
             )
         )
@@ -275,7 +286,111 @@ def cmd_invoke(args) -> int:
     return refuse(verb)
 
 
-def main() -> int:
+def _ns(**kw):
+    class N:
+        pass
+
+    n = N()
+    n.verb = kw.get("verb", "")
+    n.root = kw.get("root", "")
+    n.path = kw.get("path", "")
+    n.query = kw.get("query", "")
+    n.cursor = kw.get("cursor", "")
+    n.limit = int(kw.get("limit") or 0)
+    n.type = kw.get("type", "")
+    return n
+
+
+def cmd_serve(argv: list[str]) -> int:
+    """Network path. Auth gates access; it does not add verbs."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from remote_auth import AuthError, require_bind_config, validate_token
+
+    p = argparse.ArgumentParser(prog="remote_mcp.py serve")
+    p.add_argument("--bind", required=True, help="host:port. No anonymous bind.")
+    p.add_argument("--root", default="")
+    args = p.parse_args(argv)
+    try:
+        cfg = require_bind_config()
+    except AuthError as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}))
+        return 1
+    host, _, port_s = args.bind.rpartition(":")
+    if not host or not port_s:
+        print(json.dumps({"ok": False, "error": "bind must be host:port"}))
+        return 1
+    port = int(port_s)
+    root = args.root
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *a):  # noqa: A003
+            return
+
+        def _send(self, status: int, payload: dict) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):  # noqa: N802
+            auth = self.headers.get("Authorization") or ""
+            if not auth.startswith("Bearer "):
+                self._send(401, {"ok": False, "error": "missing bearer token"})
+                return
+            try:
+                validate_token(auth[len("Bearer ") :].strip(), cfg)
+            except AuthError as exc:
+                self._send(exc.status if exc.status >= 400 else 401, {"ok": False, "error": str(exc)})
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                self._send(400, {"ok": False, "error": "invalid json"})
+                return
+            verb = str(body.get("verb") or "")
+            ns = _ns(
+                verb=verb,
+                root=body.get("root") or root,
+                path=body.get("path") or "",
+                query=body.get("query") or "",
+                cursor=body.get("cursor") or "",
+                limit=body.get("limit") or 0,
+                type=body.get("type") or "",
+            )
+            from io import StringIO
+
+            buf = StringIO()
+            old = sys.stdout
+            sys.stdout = buf
+            try:
+                rc = cmd_invoke(ns)
+            finally:
+                sys.stdout = old
+            raw = buf.getvalue() or "{}"
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"ok": rc == 0, "raw": raw}
+            self._send(200 if rc == 0 else 403, payload)
+
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    print(json.dumps({"ok": True, "bind": args.bind, "issuer": cfg["issuer"], "transport": "network"}))
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        httpd.server_close()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "serve":
+        return cmd_serve(argv[1:])
     p = argparse.ArgumentParser()
     p.add_argument("verb")
     p.add_argument("--root", default="")
@@ -284,7 +399,7 @@ def main() -> int:
     p.add_argument("--cursor", default="")
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--type", default="")
-    args = p.parse_args()
+    args = p.parse_args(argv)
     return cmd_invoke(args)
 
 

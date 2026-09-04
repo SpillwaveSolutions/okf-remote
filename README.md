@@ -8,15 +8,17 @@ Companion: [okf-time-series](https://github.com/SpillwaveSolutions/okf-time-seri
 
 ## What this pass ships
 
-- `scripts/remote_rsync.py` — pull-based replica. rsync if present, copytree fallback. No `--delete` by default.
+- **Push replication.** A directory watcher observes `$SECOND_BRAIN_ROOT` and hands changed files to a transport. Destination from `$OKF_REPLICA_DEST` — never a hard-coded host.
+- Watcher coalesces: debounce (~2s) plus batching. Finalizing a node does not fire one rsync per file write.
+- `scripts/remote_rsync.py push` — rsync push, or S3 put when `$OKF_REPLICA_DEST` is `s3://…`. Pull remains a backstop (`pull` / legacy flags). No `--delete` by default.
 - `scripts/remote_mcp.py` — allow-listed read verbs: `list_nodes`, `get_node`, `walk_chronological`, `query`, `reverse_pointers`, `replica_status`.
-- `query` is **cursor-paginated**. Not offset — the bundle is a live filesystem and offsets drift under concurrent writes.
+- stdio is the default transport (unauthenticated). `--bind host:port` runs an OAuth 2.1 / OIDC resource server. Binding without `OKF_MCP_ISSUER` is a startup error. See [docs/AUTH.md](docs/AUTH.md).
+- `query` is **cursor-paginated**. Not offset.
 - `reverse_pointers` reads `pointer.link` files and returns the inverse name on inbound edges.
-- Forbidden: any `write_*`, `summarize`, `compact`, `saliency_detect`, `agentic_search` (the last is a skill, not a verb).
-- `agentic_search` model is configured per deployment (`OKF_AGENTIC_SEARCH_MODEL`), never pinned.
-- S3 default is a consumer-side daemon pulling objects to local disk. See [docs/S3.md](docs/S3.md).
+- Forbidden: any `write_*`, `summarize`, `compact`, `saliency_detect`, `agentic_search` (the last is a skill, not a verb). Auth does not add verbs.
+- S3 writer path is watcher put; consumer path is a daemon pulling to local disk. See [docs/S3.md](docs/S3.md).
 
-stdio only. No bind address. Never hard-code a private remote.
+Never hard-code a private remote. Northstar / Lumenfield fiction only.
 
 ## Multi-host
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-09-03
+
+- Replication is **push**, triggered by a directory watcher (`scripts/remote_watch.py`). Debounce default 2s plus batching.
+- `remote_rsync.py push` is the documented default. Destination from `$OKF_REPLICA_DEST`. Pull is retained as a backstop. Still no `--delete` by default.
+- S3 writer path: local watcher puts objects. Consumer-side daemon pulling to local disk is unchanged (`docs/S3.md`).
+- Network MCP: `serve --bind host:port` is an OAuth 2.1 / OIDC resource server. stdio remains the default and unauthenticated. Binding without `OKF_MCP_ISSUER` is a startup error (`docs/AUTH.md`).
+- Auth gates access; it does not add verbs. Watcher death is visible on `replica_status`.
+
 ## 0.2.0 — 2026-09-03
 
 - `query` verb: cursor-paginated filesystem walk. Not offset.
